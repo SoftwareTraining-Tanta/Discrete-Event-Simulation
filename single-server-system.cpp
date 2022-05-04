@@ -16,13 +16,15 @@ void init() {
 
 class Process {
 public:
-    double arrival_time;
+    double interarrival_time;
     double service_time;
-    double arrival;
-    Process(double arrival, double service, double arr) : arrival_time(arrival), service_time(service), arrival(arr) {};
+    double arrival_time;
+    Process(double interarrival, double service, double arrival) : interarrival_time(interarrival),
+                                                                   service_time(service), arrival_time(arrival) {};
     Process() {
-        arrival_time = 0;
+        interarrival_time = 0;
         service_time = 0;
+        arrival_time = 0;
     }
 };
 
@@ -50,7 +52,7 @@ vector<Process> processes;
 int cnt_delayed, total_delay_time;
 double area_under_q, area_under_b; // (clock value - time of last event) * height
 // arrival time, and service time
-int process_index;
+int process_index = 0;
 bool finished;
 int curr_time;
 
@@ -65,7 +67,7 @@ public:
         value = clk.time + processes[process_index].service_time;
     }
     void update_arrival() {
-        value += processes[process_index].arrival_time;
+        value = processes[process_index].arrival_time;
     }
 };
 
@@ -108,56 +110,52 @@ int main() {
     for (int i = 0; i < arrival_time.size(); ++i) {
         processes.push_back({arrival_time[i], service_time[i], arrival[i]});
     }
-    next_arrival_time = processes[0].arrival_time;
+//    processes.push_back({INF, INF, INF});
+
+    next_arrival_time = processes[0].interarrival_time;
     cnt_delayed = 0, total_delay_time = 0, area_under_q = 0, area_under_b = 0, process_index = 0;
-    finished = false;
     curr_time = 0;
     int delayed_processes = 0;
-    while (!finished) {
+    while (true) {
         get_time(curr_time);
         if (curr_time == INF)
             break;
-        if (curr_time == next_arrival_time.value) {
-            update_clocks(next_arrival_time.value);
-            if (server_1.status == IDLE) { // server is idle
-                current_departure_time.update_departure();
-                if (process_index == processes.size() - 1) {
-                    next_arrival_time = INF;
-                    continue;
-                } else
-                    process_index++;
-                next_arrival_time.update_arrival();
+        update_clocks(curr_time);
+        if (curr_time == current_departure_time.value) { // curr_time == current_departure_time
+            update_graph();
+            if (!waiting_queue.empty()) { // queue is not empty
+                Process curr_process = waiting_queue.front();
+                waiting_queue.pop();
+                total_delay_time += clk.time - curr_process.arrival_time;
+                current_departure_time.value =
+                        clk.time + curr_process.service_time; // add waiting time of the top process
                 cnt_delayed++;
+            } else { // no items to insert
+                server_1.status = IDLE;
+                current_departure_time.value = INF;
+            }
+        } else { // curr_time == arrival_time
+            if (server_1.status == IDLE) { // server is idle
                 server_1.status = ACTIVE;
+                current_departure_time.update_departure();
+                cnt_delayed++;
             } else { // server is active
                 update_graph();
                 waiting_queue.push(processes[process_index]);
                 delayed_processes++;
-                if (process_index == processes.size() - 1) {
-                    next_arrival_time = INF;
-                    continue;
-                } else
-                    process_index++;
             }
-        } else { // curr_time == current_departure_time
-            update_clocks(current_departure_time.value);
-            if (!waiting_queue.empty()) { // queue is not empty
-                update_graph();
-                Process curr_process = waiting_queue.front();
-                waiting_queue.pop();
-                total_delay_time += clk.time - curr_process.arrival;
-                current_departure_time.value += curr_process.service_time; // add waiting time of the top process
-                cnt_delayed++;
-            } else { // no items to insert
-                server_1.status = IDLE;
-                update_graph();
-                current_departure_time.value = INF;
+            if (process_index == processes.size() - 1) {
+                next_arrival_time.value = INF;
+                continue;
             }
+            process_index++;
+            next_arrival_time.update_arrival();
         }
     }
 
     cerr << "clock value: " << clk.time << '\n';
     cerr << "total_delay_time value: " << total_delay_time << '\n';
+    cerr << "Average waiting time: " << total_delay_time / processes.size() << '\n';
     cout << "Average delay time: " << total_delay_time * 1.0 / delayed_processes << '\n';
     cout << "Average number of processes in queue: " << area_under_q * 1.0 / clk.time << '\n';
     cout << "Area under b: " << area_under_b << '\n' << "clock final value: " << clk.time << '\n';
